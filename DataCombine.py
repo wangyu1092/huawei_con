@@ -25,3 +25,4 @@ for i in tqdm(range(len(csv_names))):
     path = os.path.join(dataload, csv_names[i])
     data = pd.read_csv(path)
     data.to_csv(outputfile, mode='a', index=False, header=False)
+
