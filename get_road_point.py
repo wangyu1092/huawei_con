@@ -32,7 +32,7 @@ def get_road_point(point_source, point_destination, gap = 5):
         direction[1] = -1
     x = x1
     y = y1
-    res.append((x,y))
+    #res.append((x,y))
     while (1):
         if ( between( f( x + gap*direction[0] ), y, y + gap*direction[1] ) ):
             x += gap*direction[0]
@@ -70,7 +70,7 @@ if __name__ == "__main__":
     print(get_road_point([0,0], [-15,-10]))
 
     
-    print(get_road_point([0,0], [15,11]))
+    print(get_road_point([0,0], [15,11])) #dont do this
 
     
     print(get_road_point([0,0], [15,15]))
