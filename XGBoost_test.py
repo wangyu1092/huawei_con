@@ -8,22 +8,23 @@ from sklearn.svm import SVR
 from sklearn.ensemble import RandomForestRegressor
 import math
 
+dataload = "D:\\FDU\\19shumo"
 
 # 这里读入的是处理之后的数据
-train = pd.read_csv("dataset/train2.csv")
-test = pd.read_csv("dataset/test2.csv")
+train = pd.read_csv(dataload + '/train .csv')
+# test = pd.read_csv("dataset/test2.csv")
 
 # Label 提取
 # 删除训练数据的 Label
-train_X = train.drop('rent', axis=1)
+train_X = train.drop('RSRP', axis=1)
 # Label 单独成列
-train_Y = train.loc[:, 'rent']
+train_Y = train.loc[:, 'RSRP']
 
 # 参数调优
 X_train, X_test, y_train, y_true = train_test_split(train_X, train_Y, test_size=0.2)
 true_list = y_true.tolist()
 
-params = [1800, 2000, 2200, 2500, 2800]
+params = [1800]
 for param in params:
     print(param)
 
