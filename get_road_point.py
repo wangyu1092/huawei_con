@@ -22,7 +22,7 @@ def get_road_point(point_source, point_destination, gap = 5):
     a = (y2 - y1) / (x2 - x1)
     b = y2 - a * x2
     f = lambda x: a*x+b
-    fv = lambda y: y/a-b
+    fv = lambda y: y/a-b/a
     between = lambda r,s,e: r >= min(s, e) and r <= max(s, e)
     res = []
     direction = [1,1]
@@ -40,6 +40,7 @@ def get_road_point(point_source, point_destination, gap = 5):
             y += gap*direction[1]
         else:
             print("不应该呀")
+            print(res)
             exit()
 
         #if( not between(x, x1, x2) and between(y, y1, y2) ):
@@ -73,8 +74,11 @@ if __name__ == "__main__":
     print(get_road_point([0,0], [15,11])) #dont do this
 
     
-    print(get_road_point([0,0], [15,15]))
+    print(get_road_point([0,0], [-465,460]))
+
+    print(get_road_point([424515.0, 3376325.0], [424050.0, 3376785.0]))
 
     tt = time.time()
-    hashtable = get_kv_point2prop()
+    #hashtable = get_kv_point2prop()
     print(time.time() - tt)
+    print(type(424515.0))
