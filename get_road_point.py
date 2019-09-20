@@ -22,7 +22,7 @@ def get_road_point(point_source, point_destination, gap = 5):
     a = (y2 - y1) / (x2 - x1)
     b = y2 - a * x2
     f = lambda x: a*x+b
-    fv = lambda y: y/a-b
+    fv = lambda y: y/a-b/a
     between = lambda r,s,e: r >= min(s, e) and r <= max(s, e)
     res = []
     direction = [1,1]
@@ -40,6 +40,7 @@ def get_road_point(point_source, point_destination, gap = 5):
             y += gap*direction[1]
         else:
             print("不应该呀")
+            print(res)
             exit()
 
         #if( not between(x, x1, x2) and between(y, y1, y2) ):
@@ -49,12 +50,12 @@ def get_road_point(point_source, point_destination, gap = 5):
         #print([x,y], "\n")
 
     return res
-
-def get_kv_point2prop(dataload = "C:/Users/LYS/Desktop/huawei/", file_name = "train.csv"):
-    train_data = pd.read_csv(os.path.join(dataload, file_name), usecols=[12,13,14,15,16])
+# def get_kv_point2prop(dataload = "C:/Users/LYS/Desktop/huawei/", file_name = "train.csv"):
+def get_kv_point2prop(X, Y, A, B, C):
+    # train_data = pd.read_csv(os.path.join(dataload, file_name), usecols=[12,13,14,15,16])
     res = {}
-    for index, row in train_data.iterrows():
-        res[(row[0], row[1])] =  [row[2], row[3], row[4]]
+    for i in range(len(X)):
+        res[(X[i], Y[i])] = [A[i], B[i], C[i]]
     return res
 
 if __name__ == "__main__":
@@ -75,6 +76,8 @@ if __name__ == "__main__":
     
     print(get_road_point([0,0], [15,15]))
 
+    print(get_road_point([424515.0, 3376325.0], [424050.0, 3376785.0]))
+
     tt = time.time()
-    hashtable = get_kv_point2prop()
+    # hashtable = get_kv_point2prop()
     print(time.time() - tt)
