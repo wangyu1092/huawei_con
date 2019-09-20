@@ -3,10 +3,12 @@ import pandas as pd
 import numpy as np
 from tqdm import tqdm
 from math import sqrt
+import math
 import matplotlib.pyplot as plt
 from sklearn import preprocessing
 import tensorflow as tf
 
+from get_road_point import get_road_point, get_kv_point2prop
 
 dataload = "D:\\FDU\\19shumo\\train_set"
 # file_name = "train.csv"
@@ -28,7 +30,7 @@ def pro_data():
     names = ["Cell Index", "Cell X", "Cell Y", "Height", "Azimuth", "Electrical Downtilt",
              "Mechanical Downtilt", "Frequency Band", "RS Power", "Cell Altitude",
              "Cell Building Height", "Cell Clutter Index", "X", "Y",
-             "Altitude", "Building Height", "Clutter Index"]
+             "Altitude", "Building Height", "Clutter Index", "RSRP"]
     index_names = ["oceans", "lakes", "wetlands", "suburban open", "urban open areas",
                    "road open areas", "vegetation", "shrub", "forest", "super-high buildings",
                    "high buildings", "mid buildings", "density buildings", "buildings",
@@ -39,7 +41,9 @@ def pro_data():
 
     print("---------------------------")
     print("Step 1: Reading data ......")
-    for i in tqdm(range(1000)):
+
+    # df_data = pd.read_csv(os.path.join(dataload, "train.csv"))
+    for i in tqdm(range(10)):
         pb_data = pd.read_csv(os.path.join(dataload, data_names[i]))
         df_data = pd.concat([df_data, pb_data], ignore_index=True)
         #input_data = np.array(pb_data.get_values()[:, 0:17], dtype=np.float32)
@@ -48,24 +52,31 @@ def pro_data():
 
     # print(filesDatas[0].shape)
 
-    station_X = df_data["Cell X"].astype(float)
-    station_Y = df_data["Cell Y"].astype(float)
-    mobile_X = df_data["X"].astype(float)
-    mobile_Y = df_data["Y"].astype(float)
+    station_X = np.array(df_data["Cell X"], dtype=np.float64)
+    station_Y = np.array(df_data["Cell Y"], dtype=np.float64)
+    mobile_X = np.array(df_data["X"], dtype=np.float64)
+    mobile_Y = np.array(df_data["Y"], dtype=np.float64)
 
-    station_AH = df_data["Cell Altitude"].astype(int)
-    station_BH = df_data["Height"].astype(int)
-    mobile_AH = df_data["Altitude"].astype(int)
-    mobile_BH = df_data["Building Height"].astype(int)
+    station_AH = np.array(df_data["Cell Altitude"], dtype=np.float32)
+    station_BH = np.array(df_data["Height"], dtype=np.float32)
+    mobile_AH = np.array(df_data["Altitude"], dtype=np.float32)
+    mobile_BH = np.array(df_data["Building Height"], dtype=np.float32)
 
-    theta_A = df_data["Electrical Downtilt"]
-    theta_B = df_data["Mechanical Downtilt"]
+    theta_A = df_data["Electrical Downtilt"].astype(float)
+    theta_B = df_data["Mechanical Downtilt"].astype(float)
 
     station_Index = df_data["Cell Clutter Index"].astype(int)
     mobile_Iindex = df_data["Clutter Index"].astype(int)
 
     print("---------------------------")
     print("Step 2: Getting dhs, distances and indexes ......")
+    di = np.sqrt(np.multiply((station_X - mobile_X), (station_X - mobile_X)) + np.multiply((station_Y - mobile_Y), (station_Y - mobile_Y)))
+    he = np.abs(station_AH + station_BH - mobile_AH - 0.5*mobile_BH)
+    ht = np.multiply(di, np.tan((theta_A + theta_B)*np.pi / 180))
+    dis = (np.sqrt(np.multiply(di, di) + np.multiply(he, he)))
+    dh = he - ht
+
+    '''
     dh = []
     dis = []
     n = len(index_names)
@@ -80,11 +91,26 @@ def pro_data():
         idx1 = station_Index[i]
         idx2 = mobile_Iindex[i]
         index_label[i][idx1 - 1] += 1
-        index_label[i][idx2 - 1] += 1
+        index_label[i][idx2 - 1] += 1'''
+
+    n = len(index_names)
+    index_label = np.zeros((len(station_Index), n))
+
+    point_dic = get_kv_point2prop(mobile_X, mobile_Y, mobile_AH, mobile_BH, mobile_Iindex)
+
+    for i in tqdm(range(len(station_X))):
+        # print(station_X[i], station_Y[i], mobile_X[i], mobile_Y[i])
+        # print(i)
+        load_line = get_road_point([0, 0], [int(mobile_X[i] - station_X[i]), int(mobile_Y[i] - station_X[i])])
+        for j in load_line:
+            # print(j)
+            point = (station_X[i] + j[0], station_Y[i] + j[1])
+            if point in point_dic:
+                # print(point)
+                index_label[i][point_dic[point][2]] += 1
 
     df_data["DealtaHeight"] = dh
     df_data["Distance"] = dis
-    df_data["Frequency Band"] = np.log10(df_data["Frequency Band"])
 
     for i in tqdm(range(n)):
         # print(index_names[i])
@@ -112,6 +138,7 @@ def pro_data():
     print("preprocessed_data[\'myInput\'].shape = ", preprocessed_data['myInput'].shape)
     print("preprocessed_data[\'myLabel\'].shape = ", preprocessed_data['myLabel'].shape)
     # print(filesDatas[0])
+    print(preprocessed_data["myLabel"][10000])
 
     return preprocessed_data
 
@@ -150,7 +177,7 @@ def main():
     c, d = x_val.shape
     print(a, b)
 
-    batch_size = 10000
+    batch_size = 1000
     tn_batchs = int(np.ceil(a / batch_size))
     vn_batchs = int(np.ceil(c / batch_size))
 
