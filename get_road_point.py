@@ -44,14 +44,16 @@ def get_road_point(point_source, point_destination, d_gap = 50, gap = 5):
         #     exit()
         if (abs(a) <= 1):
             x += direction[0] * d_gap
+            y = f(x)
             if (between( x , x1,  x2) ):
-                res.append((x,y))
+                res.append((x//5*5,y//5*5))
             else:
                 break
         else:
             y += direction[1] * d_gap
+            x = fv(y)
             if (between( y , y1,  y2) ):
-                res.append((x,y))
+                res.append((x//5*5,y//5*5))
             else:
                 break
 
