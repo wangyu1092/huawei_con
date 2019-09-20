@@ -3,28 +3,37 @@ import pandas as pd
 import numpy as np
 import time
 
-def get_road_point(point_source, point_destination, d_gap = 50, gap = 5):
+def get_road_point(point_source, point_destination, d_gap = 200, gap = 5):
+    
+
     x1 = point_source[0]
     y1 = point_source[1]
     x2 = point_destination[0]
     y2 = point_destination[1]
+
+    res = []
+    res.append((x1,y1))
+
     if (x2 == x1):
         direction = 1
         if (y2 < y1):
             direction = -1
-        return [ (x1, y) for y in range(y1 + gap*direction, y2, gap*direction)]
+        res += [ (x1, y) for y in range(y1 + d_gap*direction, y2, d_gap*direction)] 
+        res.append((x2,y2))
+        return res
     if (y2 == y1):
         direction = 1
         if (x2 < x1):
             direction = -1
-        return [ (x, y1) for x in range(x1 + gap*direction, x2, gap*direction)]
+        res += [ (x, y1) for x in range(x1 + d_gap*direction, x2, d_gap*direction)] 
+        res.append((x2,y2))
+        return res
 
     a = (y2 - y1) / (x2 - x1)
     b = y2 - a * x2
     f = lambda x: a*x+b
     fv = lambda y: y/a-b/a
     between = lambda r,s,e: r >= min(s, e) and r <= max(s, e)
-    res = []
     direction = [1,1]
     if (x2 < x1):
         direction[0] = -1
@@ -32,7 +41,6 @@ def get_road_point(point_source, point_destination, d_gap = 50, gap = 5):
         direction[1] = -1
     x = x1
     y = y1
-    res.append((x,y))
     while (1):
         # if ( between( f( x + gap*direction[0] ), y, y + gap*direction[1] ) ):
         #     x += gap*direction[0]
@@ -60,7 +68,7 @@ def get_road_point(point_source, point_destination, d_gap = 50, gap = 5):
         #if( not between(x, x1, x2) and between(y, y1, y2) ):
         if (x == x2 and y == y2 or not between(x, x1, x2) and not between(y, y1, y2)):
             break
-        res.append((x,y))
+        #res.append((x,y))
         #print([x,y], "\n")
     res.append((x2,y2))
     return res
