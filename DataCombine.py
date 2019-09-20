@@ -2,8 +2,8 @@ import os
 import pandas as pd
 from tqdm import tqdm
 
-dataload = "D:\\FDU\\19shumo\\train_set"
-outputfile = "D:\\FDU\\19shumo\\train.csv"
+dataload = "..\\train_set"
+outputfile = "..\\train.csv"
 
 
 def file_name(data_dir):
