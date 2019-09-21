@@ -304,7 +304,7 @@ def main():
 
     loss = tf.reduce_mean(tf.square(Y - pred, name="loss"))
 
-    optimizer = tf.train.AdamOptimizer(learning_rate=0.001).minimize(loss)
+    optimizer = tf.train.AdamOptimizer(learning_rate=0.01).minimize(loss)
 
     init_op = tf.global_variables_initializer()
     train_total = []
