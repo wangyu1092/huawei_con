@@ -7,12 +7,14 @@ import math
 import matplotlib.pyplot as plt
 from sklearn import preprocessing
 import tensorflow as tf
+from random import shuffle
 
 from get_road_point import get_road_point, get_kv_point2prop
 
 dataload = "D:\\FDU\\19shumo\\train_set"
+dataload_2 = "D:\\FDU\\19shumo"
 # file_name = "train.csv"
-# checkpoint = "D:\\FDU\\19shumo\\checkpoint"
+checkpoint = "D:\\FDU\\19shumo\\checkpoint"
 
 def file_name(data_dir):
     L = []
@@ -24,6 +26,26 @@ def file_name(data_dir):
 
     return L
 
+def normalize(x):
+
+    mi = x.min(axis=0)
+    ma = x.max(axis=0)
+    R= (x - mi) / (ma - mi)
+    return R
+
+def normalize2(x):
+
+    me = x.mean(axis=0)
+    st = x.std(axis=0)
+    R= (x - me) / st
+    return R
+
+def addbias(x, y):
+    m, n = x.shape
+    x = np.reshape(np.c_[np.ones(m), x], [m, n+1])
+    y = np.reshape(y, [m, 1])
+    return x, y
+
 def pro_data():
 
     preprocessed_data = {}
@@ -31,19 +53,22 @@ def pro_data():
              "Mechanical Downtilt", "Frequency Band", "RS Power", "Cell Altitude",
              "Cell Building Height", "Cell Clutter Index", "X", "Y",
              "Altitude", "Building Height", "Clutter Index", "RSRP"]
-    index_names = ["oceans", "lakes", "wetlands", "suburban open", "urban open areas",
+    index_names = ["oceans", "lakes", "wetlands", "suburban open areas", "urban open areas",
                    "road open areas", "vegetation", "shrub", "forest", "super-high buildings",
                    "high buildings", "mid buildings", "density buildings", "buildings",
-                   "sparse industria", "density", "suburban", "developed suburban", "rural", "CBD"]
+                   "sparse industrial", "density", "suburban", "developed suburban", "rural", "CBD"]
+
+    index_weight = [0.0, 0.0, 93.5, 0.0, 0.0, 94.5, 93.5, 95.5, 96.5, 0.0,
+                    94.5, 96.5, 95.5, 95.5, 95.5, 95.5, 99.7, 94.3, 92.85, 0.0]
 
     df_data = pd.DataFrame(columns=names)
     data_names = file_name(dataload)
-
+    shuffle(data_names)
     print("---------------------------")
     print("Step 1: Reading data ......")
 
-    # df_data = pd.read_csv(os.path.join(dataload, "train.csv"))
-    for i in tqdm(range(10)):
+    # df_data = pd.read_csv(os.path.join(dataload_2, "train.csv"))
+    for i in tqdm(range(100)):
         pb_data = pd.read_csv(os.path.join(dataload, data_names[i]))
         df_data = pd.concat([df_data, pb_data], ignore_index=True)
         #input_data = np.array(pb_data.get_values()[:, 0:17], dtype=np.float32)
@@ -74,7 +99,7 @@ def pro_data():
     he = np.abs(station_AH + station_BH - mobile_AH - 0.5*mobile_BH)
     ht = np.multiply(di, np.tan((theta_A + theta_B)*np.pi / 180))
     dis = (np.sqrt(np.multiply(di, di) + np.multiply(he, he)))
-    dh = he - ht
+    dh = np.abs(he - ht)
 
     '''
     dh = []
@@ -98,10 +123,15 @@ def pro_data():
 
     point_dic = get_kv_point2prop(mobile_X, mobile_Y, mobile_AH, mobile_BH, mobile_Iindex)
 
+    count = {}
     for i in tqdm(range(len(station_X))):
         # print(station_X[i], station_Y[i], mobile_X[i], mobile_Y[i])
         # print(i)
-        load_line = get_road_point([0, 0], [int(mobile_X[i] - station_X[i]), int(mobile_Y[i] - station_X[i])])
+        load_line = get_road_point([0, 0], [int(mobile_X[i] - station_X[i]), int(mobile_Y[i] - station_Y[i])], 5)
+        if len(load_line) not in count:
+            count[len(load_line)] = 1
+        else:
+            count[len(load_line)] += 1
         for j in load_line:
             # print(j)
             point = (station_X[i] + j[0], station_Y[i] + j[1])
@@ -109,6 +139,7 @@ def pro_data():
                 # print(point)
                 index_label[i][point_dic[point][2]] += 1
 
+    df_data["Index Weight"] = np.log2(np.dot(index_label, np.array(index_weight).reshape(-1, 1)))
     df_data["DealtaHeight"] = dh
     df_data["Distance"] = dis
 
@@ -125,9 +156,18 @@ def pro_data():
     print("Step 3: Dropping unuse datas ......")
     df_data = df_data.drop(columns=["Cell Index", "Cell X", "Cell Y", "Height", "Electrical Downtilt",
                                     "Mechanical Downtilt", "Cell Altitude", "Cell Clutter Index",
-                                    "X", "Y", "Altitude", "Building Height", "Clutter Index", "RSRP"])
-    InputDatas = np.array(df_data, dtype=np.float32).reshape(-1, 26)
-    OutptDatas = np.array(label_data, dtype=np.float32).reshape(-1, 1)
+                                    "X", "Y", "Altitude", "Building Height", "Clutter Index", "RSRP",
+                                    "oceans", "wetlands", "suburban open areas", "forest", "rural", "CBD"])
+    # "oceans", "wetlands", "suburban open areas", "forest", "rural", "CBD"
+    print(df_data.info())
+    df_data_write = df_data.copy()
+    df_data_write["RSRP"] = label_data
+    df_data_write.to_csv(os.path.join(dataload_2, "feature2.csv"), index=False)
+    InputDatas = np.array(df_data, dtype=np.float32).reshape(-1, 21)
+    OutptDatas = np.array(label_data, dtype=np.float32).reshape(-1, 1) * -1
+
+    InputDatas = normalize(InputDatas) * 100
+    # OutptDatas = normalize(OutptDatas)
 
     label_data = pd.DataFrame({"RSRP": label_data})
     print(df_data.info())
@@ -137,8 +177,14 @@ def pro_data():
 
     print("preprocessed_data[\'myInput\'].shape = ", preprocessed_data['myInput'].shape)
     print("preprocessed_data[\'myLabel\'].shape = ", preprocessed_data['myLabel'].shape)
-    # print(filesDatas[0])
-    print(preprocessed_data["myLabel"][10000])
+
+    print(count)
+    print(preprocessed_data["myInput"][100])
+    print("------------------------------")
+    print(preprocessed_data["myInput"][1000])
+    print("------------------------------")
+    print(preprocessed_data["myInput"][10000])
+    print("------------------------------")
 
     return preprocessed_data
 
@@ -159,6 +205,69 @@ def init_bias(shape, st_dev):
 def fully_connected(input_layer, weights, biases):
     layer = tf.add(tf.matmul(tf.cast(input_layer, tf.float32), weights), biases)
     return (tf.nn.relu(layer))
+
+def CaculatePcrr(y_true,y_pred):
+    t = -103
+
+    # print(yt, yp)
+    y_true = np.multiply(y_true, -1)
+    y_pred = np.multiply(y_pred, -1)
+    tp = 0
+    fp = 0
+    fn = 0
+
+    for i, j in zip(y_true, y_pred):
+        if i < t and j < t:
+            tp += 1
+        elif i >= t and j < t:
+            fp += 1
+        elif i < t and j >= t:
+            fn +=1
+
+    precision = tp / (tp + fp)
+    recall = tp / (tp + fn)
+    pcrr = 2 * (precision * recall) / (precision + recall)
+    return pcrr
+
+def train_net_model(x_in, sdv):
+
+    # 定义变量函数(权重和偏差)，stdev参数表示方差
+
+    weight_0 = init_weight(shape=[21, 50], st_dev=sdv)
+    bias_0 = init_bias(shape=[50], st_dev=sdv)
+    layer_0 = fully_connected(x_in, weight_0, bias_0)
+
+    # --------Create second layer (25 hidden nodes)--------
+    weight_1 = init_weight(shape=[50, 25], st_dev=sdv)
+    bias_1 = init_bias(shape=[25], st_dev=sdv)
+    layer_1 = fully_connected(layer_0, weight_1, bias_1)
+
+    # --------Create second layer (10 hidden nodes)--------
+    weight_2 = init_weight(shape=[25, 10], st_dev=sdv)
+    bias_2 = init_bias(shape=[10], st_dev=sdv)
+    layer_2 = fully_connected(layer_1, weight_2, bias_2)
+
+    # --------Create third layer (3 hidden nodes)--------
+    weight_3 = init_weight(shape=[10, 3], st_dev=sdv)
+    bias_3 = init_bias(shape=[3], st_dev=sdv)
+    layer_3 = fully_connected(layer_2, weight_3, bias_3)
+
+    # --------Create output layer (1 output value)--------
+    weight_4 = init_weight(shape=[3, 1], st_dev=0.5)
+    bias_4 = init_bias(shape=[1], st_dev=0.5)
+    pred = fully_connected(layer_3, weight_4, bias_4)
+
+    # print(pred.get_shape().as_list())
+
+    return pred
+def train_line_model(x, stv):
+
+    w = tf.Variable(tf.random_normal([7, 1], stddev=stv), name="W")
+    b = tf.Variable(1.0, name="b")
+    pred = tf.matmul(x, w) + b
+
+    return pred
+
 
 
 def main():
@@ -184,62 +293,65 @@ def main():
     X = tf.placeholder(tf.float32, name='X', shape=[None, b])
     Y = tf.placeholder(tf.float32, name='Y', shape=[None, 1])
 
-    # 定义变量函数(权重和偏差)，stdev参数表示方差
-    # --------Create second layer (50 hidden nodes)--------
-    weight_0 = init_weight(shape=[26, 50], st_dev=10.0)
-    bias_0 = init_bias(shape=[50], st_dev=10.0)
-    layer_0 = fully_connected(X, weight_0, bias_0)
 
-    # --------Create second layer (25 hidden nodes)--------
-    weight_1 = init_weight(shape=[50, 25], st_dev=10.0)
-    bias_1 = init_bias(shape=[25], st_dev=10.0)
-    layer_1 = fully_connected(layer_0, weight_1, bias_1)
+    pred = train_net_model(X, 0.05)
+    # pred = train_line_model(X, 0.5)
 
-    # --------Create second layer (10 hidden nodes)--------
-    weight_2 = init_weight(shape=[25, 10], st_dev=10.0)
-    bias_2 = init_bias(shape=[10], st_dev=10.0)
-    layer_2 = fully_connected(layer_1, weight_2, bias_2)
-
-    # --------Create third layer (3 hidden nodes)--------
-    weight_3 = init_weight(shape=[10, 3], st_dev=10.0)
-    bias_3 = init_bias(shape=[3], st_dev=10.0)
-    layer_3 = fully_connected(layer_2, weight_3, bias_3)
-
-    # --------Create output layer (1 output value)--------
-    weight_4 = init_weight(shape=[3, 1], st_dev=10.0)
-    bias_4 = init_bias(shape=[1], st_dev=10.0)
-    final_output = fully_connected(layer_3, weight_4, bias_4)
-
+    # bias = tf.Variable(tf.fill(pred.get_shape().as_list(), -1), name="bias")
+    # preds = tf.matmul(pred, tf.cast(bias, tf.float32))
+    # pcrr = CaculatePcrr(Y, pred)
     # print(final_output.shape)
 
+    loss = tf.reduce_mean(tf.square(Y - pred, name="loss"))
 
-    loss = tf.reduce_mean(tf.square(Y - final_output, name="loss"))
-
-    optimizer = tf.train.AdamOptimizer(learning_rate=0.01).minimize(loss)
+    optimizer = tf.train.AdamOptimizer(learning_rate=0.001).minimize(loss)
 
     init_op = tf.global_variables_initializer()
     train_total = []
     val_total = []
+
     with tf.Session() as sess:
         sess.run(init_op)
         writer = tf.summary.FileWriter('graphs', sess.graph)
+        pre = list()
         for i in range(100):
             print("Epoch {0}: ------".format(i))
+            ev_loss = []
+            pre_per = []
             for j in range(tn_batchs):
                 x, y = fetch_batch_data(x_train, y_train, batch_size, j)
-                _, l = sess.run([optimizer, loss], feed_dict={X: x, Y: y})
-                train_total.append(l)
-                if j % 10 == 0:
-                    print("{0} / {1} : TrainLoss {2}".format(j, tn_batchs, l))
+                _, l, fl = sess.run([optimizer, loss, pred], feed_dict={X: x, Y: y})
+                ev_loss.append(l)
+                pre_per.extend(fl)
+                if j % 100 == 0:
+                    print("y-pre[10] and y-true[10]:", fl[100], y[100])
+                    # print("{0} / {1} : TrainLoss {2}".format(j, tn_batchs, l))
+            # print("y-pre[10] and y-true[10]:", fl[100], y[100])
+            t_loss = sum(ev_loss) / tn_batchs
+            train_total.append(t_loss)
+            print("Total TrainLoss {0}".format(t_loss))
+            #if i >= 800:
+            #    pc = CaculatePcrr(y_val, pre_per)
+            #    print("train_pcrr:", pc)
 
+            pre = pre_per
+            '''pre = []
             for j in range(vn_batchs):
                 x, y = fetch_batch_data(x_val, y_val, batch_size, j)
-                _, l = sess.run([optimizer, loss], feed_dict={X: x, Y: y})
+                _, l, fl = sess.run([optimizer, loss, pred], feed_dict={X: x, Y: y})
                 val_total.append(l)
+                pre.extend(fl)
+                print("fl[10]:", fl[10], y[10])
                 if j % 10 == 0:
                     print("{0} / {1} : ValLoss {2}".format(j, vn_batchs, l))
+            if i >= 90:
+                pc = CaculatePcrr(pre, y_val)
+                print("val_pcrr:", pc)'''
+
         writer.close()
-        # tf.saved_model.simple_save(sess, checkpoint, inputs={"myInput": X}, outputs={"myOutput": final_output})
+        # bias = tf.Variable(tf.fill(pred.get_shape().as_list(), -1), name="bias")
+        # preds = tf.matmul(pred, tf.cast(bias, tf.float32))
+        tf.saved_model.simple_save(sess, checkpoint, inputs={"myInput": X}, outputs={"myOutput": pred})
 
     plt.plot(train_total)
     plt.show()
