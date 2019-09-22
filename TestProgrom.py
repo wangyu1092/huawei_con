@@ -108,7 +108,7 @@ def pro_data():
     di = np.sqrt(np.multiply((station_X - mobile_X), (station_X - mobile_X)) + np.multiply((station_Y - mobile_Y), (station_Y - mobile_Y)))
     he = np.abs(station_AH + station_BH - mobile_AH - 0.5*mobile_BH)
     ht = np.multiply(di, np.tan((theta_A + theta_B)*np.pi / 180))
-    dis = np.log2(np.sqrt(np.multiply(di, di) + np.multiply(he, he)))
+    dis = np.sqrt(np.multiply(di, di) + np.multiply(he, he))
     dh = abs(ht - he)
 
     '''
@@ -149,10 +149,10 @@ def pro_data():
                 # print(point)
                 index_label[i][point_dic[point][2]] += 1
 
-    df_data["Index Weight"] = np.log2(np.dot(index_label, np.array(index_weight).reshape(-1, 1)))
-    df_data["DealtaHeight"] = np.log2(dh)
+    df_data["Index Weight"] = np.dot(index_label, np.array(index_weight).reshape(-1, 1))
+    df_data["DealtaHeight"] = dh
     df_data["Distance"] = dis
-    df_data["Frequency Band"] = np.log10(df_data["Frequency Band"])
+    df_data["Frequency Band"] = np.log2(df_data["Frequency Band"])
     litheta = abs(theta - theta_AZ)
     litheta[litheta > 180] *= -1
     litheta[litheta < -180] += 360
@@ -180,7 +180,7 @@ def pro_data():
     df_data_write["RSRP"] = label_data
     # df_data_write.to_csv(os.path.join(dataload_2, "feature2.csv"), index=False)
     InputDatas = np.array(df_data, dtype=np.float32).reshape(-1, 21)
-    OutptDatas = np.array(label_data, dtype=np.float32).reshape(-1, 1) * -1
+    OutptDatas = np.array(label_data, dtype=np.float32).reshape(-1, 1)
 
     # InputDatas = normalize(InputDatas) * 100
     # OutptDatas = normalize(OutptDatas)
@@ -226,8 +226,8 @@ def CaculatePcrr(y_true,y_pred):
     t = -103
 
     # print(yt, yp)
-    y_true = np.multiply(y_true, -1)
-    y_pred = np.multiply(y_pred, -1)
+    # y_true = np.multiply(y_true, -1)
+    # y_pred = np.multiply(y_pred, -1)
     tp = 0
     fp = 0
     fn = 0
@@ -332,7 +332,7 @@ def main():
     X = tf.placeholder(tf.float32, name='X', shape=[None, b])
     Y = tf.placeholder(tf.float32, name='Y', shape=[None, 1])
 
-    pred = train_net_model(X, 1)
+    pred = train_net_model(X, 0.01)
     # pred = train_line_model(X, 1)
 
     # bias = tf.Variable(tf.fill(pred.get_shape().as_list(), -1), name="bias")
@@ -342,7 +342,7 @@ def main():
 
     loss = tf.reduce_mean(tf.square(Y - pred, name="loss"))
 
-    optimizer = tf.train.AdamOptimizer(learning_rate=0.001).minimize(loss)
+    optimizer = tf.train.AdamOptimizer(learning_rate=0.01).minimize(loss)
 
     init_op = tf.global_variables_initializer()
     train_total = []
