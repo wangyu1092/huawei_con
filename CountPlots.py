@@ -6,7 +6,7 @@ import matplotlib
 dataload = "D:\\FDU\\19shumo"
 
 train_data = pd.read_csv(os.path.join(dataload, "train.csv"))
-x = list(train_data["Cell Clutter Index"])
+x = list(train_data["Azimuth"])
 y = set(x)
 d = []
 for i in tqdm(y):
@@ -31,6 +31,6 @@ plt.legend()     # 设置题注
 for rect in rects1:
     height = rect.get_height()
     plt.text(rect.get_x() + rect.get_width() / 2, height+1, str(int(height/10000))+'w', ha="center", va="bottom")
-plt.savefig(os.path.join(dataload, "Cell-Clutter-Index .png"))
+plt.savefig(os.path.join(dataload, "Azimuth.png"))
 plt.show()
 

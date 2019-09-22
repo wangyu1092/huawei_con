@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 from sklearn import preprocessing
 import tensorflow as tf
 from random import shuffle
+from tensorflow.python.saved_model import signature_constants
 
 from get_road_point import get_road_point, get_kv_point2prop
 
@@ -68,7 +69,7 @@ def pro_data():
     print("Step 1: Reading data ......")
 
     # df_data = pd.read_csv(os.path.join(dataload_2, "train.csv"))
-    for i in tqdm(range(100)):
+    for i in tqdm(range(50)):
         pb_data = pd.read_csv(os.path.join(dataload, data_names[i]))
         df_data = pd.concat([df_data, pb_data], ignore_index=True)
         #input_data = np.array(pb_data.get_values()[:, 0:17], dtype=np.float32)
@@ -81,6 +82,7 @@ def pro_data():
     station_Y = np.array(df_data["Cell Y"], dtype=np.float64)
     mobile_X = np.array(df_data["X"], dtype=np.float64)
     mobile_Y = np.array(df_data["Y"], dtype=np.float64)
+    theta_AZ = np.array(df_data["Azimuth"], dtype=np.float64)
 
     station_AH = np.array(df_data["Cell Altitude"], dtype=np.float32)
     station_BH = np.array(df_data["Height"], dtype=np.float32)
@@ -95,11 +97,19 @@ def pro_data():
 
     print("---------------------------")
     print("Step 2: Getting dhs, distances and indexes ......")
+
+    delat_X = mobile_X - station_X
+
+    theta = np.arctan((mobile_Y - station_Y) / (mobile_X - station_Y)) * 180 / np.pi
+    theta *= -1
+    theta[delat_X > 0] += 90
+    theta[delat_X < 0] += 270
+
     di = np.sqrt(np.multiply((station_X - mobile_X), (station_X - mobile_X)) + np.multiply((station_Y - mobile_Y), (station_Y - mobile_Y)))
     he = np.abs(station_AH + station_BH - mobile_AH - 0.5*mobile_BH)
     ht = np.multiply(di, np.tan((theta_A + theta_B)*np.pi / 180))
-    dis = (np.sqrt(np.multiply(di, di) + np.multiply(he, he)))
-    dh = np.abs(he - ht)
+    dis = np.log2(np.sqrt(np.multiply(di, di) + np.multiply(he, he)))
+    dh = abs(ht - he)
 
     '''
     dh = []
@@ -127,7 +137,7 @@ def pro_data():
     for i in tqdm(range(len(station_X))):
         # print(station_X[i], station_Y[i], mobile_X[i], mobile_Y[i])
         # print(i)
-        load_line = get_road_point([0, 0], [int(mobile_X[i] - station_X[i]), int(mobile_Y[i] - station_Y[i])], 5)
+        load_line = get_road_point([0, 0], [int(mobile_X[i] - station_X[i]), int(mobile_Y[i] - station_Y[i])], 10)
         if len(load_line) not in count:
             count[len(load_line)] = 1
         else:
@@ -140,8 +150,14 @@ def pro_data():
                 index_label[i][point_dic[point][2]] += 1
 
     df_data["Index Weight"] = np.log2(np.dot(index_label, np.array(index_weight).reshape(-1, 1)))
-    df_data["DealtaHeight"] = dh
+    df_data["DealtaHeight"] = np.log2(dh)
     df_data["Distance"] = dis
+    df_data["Frequency Band"] = np.log10(df_data["Frequency Band"])
+    litheta = abs(theta - theta_AZ)
+    litheta[litheta > 180] *= -1
+    litheta[litheta < -180] += 360
+
+    df_data["LineTheta"] = litheta * np.pi / 180
 
     for i in tqdm(range(n)):
         # print(index_names[i])
@@ -154,19 +170,19 @@ def pro_data():
 
     print("---------------------------")
     print("Step 3: Dropping unuse datas ......")
-    df_data = df_data.drop(columns=["Cell Index", "Cell X", "Cell Y", "Height", "Electrical Downtilt",
+    df_data = df_data.drop(columns=["Cell Index", "Azimuth", "Cell X", "Cell Y", "Height", "Electrical Downtilt",
                                     "Mechanical Downtilt", "Cell Altitude", "Cell Clutter Index",
                                     "X", "Y", "Altitude", "Building Height", "Clutter Index", "RSRP",
                                     "oceans", "wetlands", "suburban open areas", "forest", "rural", "CBD"])
-    # "oceans", "wetlands", "suburban open areas", "forest", "rural", "CBD"
+
     print(df_data.info())
     df_data_write = df_data.copy()
     df_data_write["RSRP"] = label_data
-    df_data_write.to_csv(os.path.join(dataload_2, "feature2.csv"), index=False)
+    # df_data_write.to_csv(os.path.join(dataload_2, "feature2.csv"), index=False)
     InputDatas = np.array(df_data, dtype=np.float32).reshape(-1, 21)
     OutptDatas = np.array(label_data, dtype=np.float32).reshape(-1, 1) * -1
 
-    InputDatas = normalize(InputDatas) * 100
+    # InputDatas = normalize(InputDatas) * 100
     # OutptDatas = normalize(OutptDatas)
 
     label_data = pd.DataFrame({"RSRP": label_data})
@@ -194,12 +210,12 @@ def fetch_batch_data(x_da, y_da, batchsize, idx):
 
     return x_fda, y_fda
 
-def init_weight(shape, st_dev):
-    weight = tf.Variable(tf.random_normal(shape, stddev=st_dev))
+def init_weight(shape, mea, st_dev):
+    weight = tf.Variable(tf.random_normal(shape, mean=mea, stddev=st_dev))
     return (weight)
 
-def init_bias(shape, st_dev):
-    bias = tf.Variable(tf.random_normal(shape, stddev=st_dev))
+def init_bias(shape, mea, st_dev):
+    bias = tf.Variable(tf.random_normal(shape, mean=mea, stddev=st_dev))
     return (bias)
 
 def fully_connected(input_layer, weights, biases):
@@ -229,40 +245,63 @@ def CaculatePcrr(y_true,y_pred):
     pcrr = 2 * (precision * recall) / (precision + recall)
     return pcrr
 
+
+def add_layer(inputs, input_size, output_size, sdv, activation_function=None):
+    with tf.variable_scope("Weights"):
+        Weights = tf.Variable(tf.random_normal(shape=[input_size,output_size], stddev=sdv), name="weights")
+    with tf.variable_scope("biases"):
+        biases = tf.Variable(tf.zeros(shape=[1,output_size]) + 0.1, name="biases")
+    with tf.name_scope("Wx_plus_b"):
+        Wx_plus_b = tf.matmul(inputs,Weights) + biases
+    with tf.name_scope("dropout"):
+        Wx_plus_b = tf.nn.dropout(Wx_plus_b, keep_prob=1)
+    if activation_function is None:
+        return Wx_plus_b
+    else:
+        with tf.name_scope("activation_function"):
+            return activation_function(Wx_plus_b)
+
 def train_net_model(x_in, sdv):
 
     # 定义变量函数(权重和偏差)，stdev参数表示方差
 
-    weight_0 = init_weight(shape=[21, 50], st_dev=sdv)
-    bias_0 = init_bias(shape=[50], st_dev=sdv)
-    layer_0 = fully_connected(x_in, weight_0, bias_0)
+    layer_0 = add_layer(x_in, 21, 50, sdv, activation_function=tf.nn.relu)
+    layer_1 = add_layer(layer_0, 50, 30, sdv, activation_function=tf.nn.relu)
+    layer_2 = add_layer(layer_1, 30, 10, sdv, activation_function=tf.nn.relu)
+    layer_3 = add_layer(layer_2, 10, 3, sdv, activation_function=tf.nn.relu)
+    pred = add_layer(layer_3, 3, 1, sdv)
+    return pred
 
-    # --------Create second layer (25 hidden nodes)--------
-    weight_1 = init_weight(shape=[50, 25], st_dev=sdv)
-    bias_1 = init_bias(shape=[25], st_dev=sdv)
-    layer_1 = fully_connected(layer_0, weight_1, bias_1)
-
-    # --------Create second layer (10 hidden nodes)--------
-    weight_2 = init_weight(shape=[25, 10], st_dev=sdv)
-    bias_2 = init_bias(shape=[10], st_dev=sdv)
-    layer_2 = fully_connected(layer_1, weight_2, bias_2)
-
-    # --------Create third layer (3 hidden nodes)--------
-    weight_3 = init_weight(shape=[10, 3], st_dev=sdv)
-    bias_3 = init_bias(shape=[3], st_dev=sdv)
-    layer_3 = fully_connected(layer_2, weight_3, bias_3)
-
-    # --------Create output layer (1 output value)--------
-    weight_4 = init_weight(shape=[3, 1], st_dev=0.5)
-    bias_4 = init_bias(shape=[1], st_dev=0.5)
-    pred = fully_connected(layer_3, weight_4, bias_4)
+    # # --------Create second layer (25 hidden nodes)--------
+    # weight_1 = init_weight(shape=[50, 80], mea=me, st_dev=sdv)
+    # bias_1 = init_bias(shape=[80], mea=me, st_dev=sdv)
+    # layer_1 = fully_connected(layer_0, weight_1, bias_1)
+    #
+    # # --------Create second layer (25 hidden nodes)--------
+    # weight_2 = init_weight(shape=[80, 50], mea=me, st_dev=sdv)
+    # bias_2 = init_bias(shape=[50], mea=me, st_dev=sdv)
+    # layer_2 = fully_connected(layer_1, weight_2, bias_2)
+    # # --------Create second layer (10 hidden nodes)--------
+    # weight_3 = init_weight(shape=[50, 30], mea=me, st_dev=sdv)
+    # bias_3 = init_bias(shape=[30], mea=me, st_dev=sdv)
+    # layer_3 = fully_connected(layer_2, weight_3, bias_3)
+    #
+    # # --------Create third layer (3 hidden nodes)--------
+    # weight_4 = init_weight(shape=[30, 10], mea=me, st_dev=sdv)
+    # bias_4 = init_bias(shape=[10], mea=me, st_dev=sdv)
+    # layer_4 = fully_connected(layer_3, weight_4, bias_4)
+    #
+    # # --------Create output layer (1 output value)--------
+    # weight_5 = init_weight(shape=[10, 1], mea=me, st_dev=sdv)
+    # bias_5 = init_bias(shape=[1], mea=me, st_dev=sdv)
+    # pred = fully_connected(layer_4, weight_5, bias_5)
 
     # print(pred.get_shape().as_list())
 
-    return pred
+
 def train_line_model(x, stv):
 
-    w = tf.Variable(tf.random_normal([7, 1], stddev=stv), name="W")
+    w = tf.Variable(tf.random_normal([21, 1], stddev=stv), name="W")
     b = tf.Variable(1.0, name="b")
     pred = tf.matmul(x, w) + b
 
@@ -276,7 +315,7 @@ def main():
     x_data = datapre["myInput"]
     y_data = datapre["myLabel"]
 
-    val_rate = 0.1
+    val_rate = 0.2
     train_num = int(x_data.shape[0] * (1.0 - val_rate))
     x_train = x_data[:train_num]
     y_train = y_data[:train_num]
@@ -293,9 +332,8 @@ def main():
     X = tf.placeholder(tf.float32, name='X', shape=[None, b])
     Y = tf.placeholder(tf.float32, name='Y', shape=[None, 1])
 
-
-    pred = train_net_model(X, 0.05)
-    # pred = train_line_model(X, 0.5)
+    pred = train_net_model(X, 1)
+    # pred = train_line_model(X, 1)
 
     # bias = tf.Variable(tf.fill(pred.get_shape().as_list(), -1), name="bias")
     # preds = tf.matmul(pred, tf.cast(bias, tf.float32))
@@ -304,17 +342,33 @@ def main():
 
     loss = tf.reduce_mean(tf.square(Y - pred, name="loss"))
 
-    optimizer = tf.train.AdamOptimizer(learning_rate=0.01).minimize(loss)
+    optimizer = tf.train.AdamOptimizer(learning_rate=0.001).minimize(loss)
 
     init_op = tf.global_variables_initializer()
     train_total = []
     val_total = []
 
+    # with tf.Session(graph=tf.Graph()) as sess:
+    #     meta_graph_def = tf.saved_model.loader.load(sess, ["serve"], checkpoint)
+    #     signature = meta_graph_def.signature_def
+    #
+    #     in_tensor_name = signature[signature_constants.DEFAULT_SERVING_SIGNATURE_DEF_KEY].inputs['myInput'].name
+    #     out_tensor_name = signature[signature_constants.DEFAULT_SERVING_SIGNATURE_DEF_KEY].outputs['myOutput'].name
+    #     x = sess.graph.get_tensor_by_name(in_tensor_name)
+    #     y = sess.graph.get_tensor_by_name(out_tensor_name)
+    #
+    #     for i in range(vn_batchs):
+    #
+    #         batch_xs, batch_ys = fetch_batch_data(x_val, y_val,batch_size, i)
+    #         pre = sess.run(y,feed_dict={x: batch_xs})
+    #         print("predict: {0}, y_true: {1}".format(pre[200], batch_ys[200]))
+
+
     with tf.Session() as sess:
         sess.run(init_op)
         writer = tf.summary.FileWriter('graphs', sess.graph)
         pre = list()
-        for i in range(100):
+        for i in range(1000):
             print("Epoch {0}: ------".format(i))
             ev_loss = []
             pre_per = []
@@ -330,23 +384,23 @@ def main():
             t_loss = sum(ev_loss) / tn_batchs
             train_total.append(t_loss)
             print("Total TrainLoss {0}".format(t_loss))
-            #if i >= 800:
-            #    pc = CaculatePcrr(y_val, pre_per)
-            #    print("train_pcrr:", pc)
+            if i >= 900:
+               pc = CaculatePcrr(y_val, pre_per)
+               print("train_pcrr:", pc)
 
-            pre = pre_per
-            '''pre = []
-            for j in range(vn_batchs):
-                x, y = fetch_batch_data(x_val, y_val, batch_size, j)
-                _, l, fl = sess.run([optimizer, loss, pred], feed_dict={X: x, Y: y})
-                val_total.append(l)
-                pre.extend(fl)
-                print("fl[10]:", fl[10], y[10])
-                if j % 10 == 0:
-                    print("{0} / {1} : ValLoss {2}".format(j, vn_batchs, l))
-            if i >= 90:
-                pc = CaculatePcrr(pre, y_val)
-                print("val_pcrr:", pc)'''
+            # pre = pre_per
+            # pre = []
+            # for j in range(vn_batchs):
+            #     x, y = fetch_batch_data(x_val, y_val, batch_size, j)
+            #     _, l, fl = sess.run([optimizer, loss, pred], feed_dict={X: x, Y: y})
+            #     val_total.append(l)
+            #     pre.extend(fl)
+            #     print("fl[10]:", fl[10], y[10])
+            #     if j % 10 == 0:
+            #         print("{0} / {1} : ValLoss {2}".format(j, vn_batchs, l))
+            # if i >= 90:
+            #     pc = CaculatePcrr(pre, y_val)
+            #     print("val_pcrr:", pc)
 
         writer.close()
         # bias = tf.Variable(tf.fill(pred.get_shape().as_list(), -1), name="bias")
