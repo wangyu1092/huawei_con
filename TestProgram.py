@@ -12,7 +12,7 @@ from tensorflow.python.saved_model import signature_constants
 
 from get_road_point import get_road_point, get_kv_point2prop
 
-dataload = "D:\\FDU\\19shumo\\train_set"
+dataload = "D:\\FDU\\19shumo\\train_set2"
 dataload_2 = "D:\\FDU\\19shumo"
 # file_name = "train.csv"
 checkpoint = "D:\\FDU\\19shumo\\checkpoint"
@@ -50,10 +50,10 @@ def addbias(x, y):
 def pro_data():
 
     preprocessed_data = {}
-    names = ["Cell Index", "Cell X", "Cell Y", "Height", "Azimuth", "Electrical Downtilt",
-             "Mechanical Downtilt", "Frequency Band", "RS Power", "Cell Altitude",
-             "Cell Building Height", "Cell Clutter Index", "X", "Y",
-             "Altitude", "Building Height", "Clutter Index", "RSRP"]
+    # names = ["Cell Index", "Cell X", "Cell Y", "Height", "Azimuth", "Electrical Downtilt",
+    #          "Mechanical Downtilt", "Frequency Band", "RS Power", "Cell Altitude",
+    #          "Cell Building Height", "Cell Clutter Index", "X", "Y",
+    #          "Altitude", "Building Height", "Clutter Index", "RSRP"]
     index_names = ["oceans", "lakes", "wetlands", "suburban open areas", "urban open areas",
                    "road open areas", "vegetation", "shrub", "forest", "super-high buildings",
                    "high buildings", "mid buildings", "density buildings", "buildings",
@@ -62,20 +62,20 @@ def pro_data():
     index_weight = [0.0, 0.0, 93.5, 0.0, 0.0, 94.5, 93.5, 95.5, 96.5, 0.0,
                     94.5, 96.5, 95.5, 95.5, 95.5, 95.5, 99.7, 94.3, 92.85, 0.0]
 
-    df_data = pd.DataFrame(columns=names)
+    # df_data = pd.DataFrame(columns=names)
     data_names = file_name(dataload)
     shuffle(data_names)
     print("---------------------------")
     print("Step 1: Reading data ......")
 
     # df_data = pd.read_csv(os.path.join(dataload_2, "train.csv"))
-    for i in tqdm(range(50)):
-        pb_data = pd.read_csv(os.path.join(dataload, data_names[i]))
-        df_data = pd.concat([df_data, pb_data], ignore_index=True)
+    # for i in tqdm(range(len(data_names))):
+    #     pb_data = pd.read_csv(os.path.join(dataload, data_names[i]))
+    #     df_data = pd.concat([df_data, pb_data], ignore_index=True)
         #input_data = np.array(pb_data.get_values()[:, 0:17], dtype=np.float32)
         #print(file_content, input_data.shape)
         # filesDatas.extend(input_data)
-
+    df_data = pd.read_csv(dataload + '/train.csv')
     # print(filesDatas[0].shape)
 
     station_X = np.array(df_data["Cell X"], dtype=np.float64)
@@ -137,7 +137,7 @@ def pro_data():
     for i in tqdm(range(len(station_X))):
         # print(station_X[i], station_Y[i], mobile_X[i], mobile_Y[i])
         # print(i)
-        load_line = get_road_point([0, 0], [int(mobile_X[i] - station_X[i]), int(mobile_Y[i] - station_Y[i])], 10)
+        load_line = get_road_point([0, 0], [int(mobile_X[i] - station_X[i]), int(mobile_Y[i] - station_Y[i])])
         if len(load_line) not in count:
             count[len(load_line)] = 1
         else:
@@ -159,11 +159,11 @@ def pro_data():
 
     df_data["LineTheta"] = litheta * np.pi / 180
 
-    for i in tqdm(range(n)):
-        # print(index_names[i])
-        infom = index_label[:, i].reshape(-1, 1)
-        # print(infom.shape)
-        df_data[index_names[i]] = infom
+    # for i in tqdm(range(n)):
+    #     # print(index_names[i])
+    #     infom = index_label[:, i].reshape(-1, 1)
+    #     # print(infom.shape)
+    #     df_data[index_names[i]] = infom
 
     # print(df_data.info())
     label_data = df_data["RSRP"]
@@ -172,14 +172,13 @@ def pro_data():
     print("Step 3: Dropping unuse datas ......")
     df_data = df_data.drop(columns=["Cell Index", "Azimuth", "Cell X", "Cell Y", "Height", "Electrical Downtilt",
                                     "Mechanical Downtilt", "Cell Altitude", "Cell Clutter Index",
-                                    "X", "Y", "Altitude", "Building Height", "Clutter Index", "RSRP",
-                                    "oceans", "wetlands", "suburban open areas", "forest", "rural", "CBD"])
-
+                                    "X", "Y", "Altitude", "Building Height", "Clutter Index", "RSRP"])
+    # "oceans", "wetlands", "suburban open areas", "forest", "rural", "CBD"
     print(df_data.info())
     df_data_write = df_data.copy()
     df_data_write["RSRP"] = label_data
-    # df_data_write.to_csv(os.path.join(dataload_2, "feature2.csv"), index=False)
-    InputDatas = np.array(df_data, dtype=np.float32).reshape(-1, 21)
+    df_data_write.to_csv(os.path.join(dataload_2, "feature_7.csv"), index=False)
+    InputDatas = np.array(df_data, dtype=np.float32).reshape(-1, 7)
     OutptDatas = np.array(label_data, dtype=np.float32).reshape(-1, 1)
 
     # InputDatas = normalize(InputDatas) * 100
@@ -265,10 +264,10 @@ def train_net_model(x_in, sdv):
 
     # 定义变量函数(权重和偏差)，stdev参数表示方差
 
-    layer_0 = add_layer(x_in, 21, 50, sdv, activation_function=tf.nn.relu)
-    layer_1 = add_layer(layer_0, 50, 30, sdv, activation_function=tf.nn.relu)
-    layer_2 = add_layer(layer_1, 30, 10, sdv, activation_function=tf.nn.relu)
-    layer_3 = add_layer(layer_2, 10, 3, sdv, activation_function=tf.nn.relu)
+    layer_0 = add_layer(x_in, 7, 16, sdv, activation_function=tf.nn.relu)
+    layer_1 = add_layer(layer_0, 16, 24, sdv, activation_function=tf.nn.relu)
+    layer_2 = add_layer(layer_1, 24, 12, sdv, activation_function=tf.nn.relu)
+    layer_3 = add_layer(layer_2, 12, 3, sdv, activation_function=tf.nn.relu)
     pred = add_layer(layer_3, 3, 1, sdv)
     return pred
 
@@ -325,7 +324,7 @@ def main():
     c, d = x_val.shape
     print(a, b)
 
-    batch_size = 1000
+    batch_size = 500
     tn_batchs = int(np.ceil(a / batch_size))
     vn_batchs = int(np.ceil(c / batch_size))
 
@@ -368,7 +367,7 @@ def main():
         sess.run(init_op)
         writer = tf.summary.FileWriter('graphs', sess.graph)
         pre = list()
-        for i in range(1000):
+        for i in range(500):
             print("Epoch {0}: ------".format(i))
             ev_loss = []
             pre_per = []
