@@ -5,7 +5,7 @@ import time
 import math
 
 
-def get_road_point(point_source, point_destination, d_gap=7.0711):
+def get_road_point(point_source, point_destination, d_gap=8):
     x1 = point_source[0]
     y1 = point_source[1]
     x2 = point_destination[0]
