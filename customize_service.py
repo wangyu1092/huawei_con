@@ -1,7 +1,7 @@
 import numpy as np
 from model_service.tfserving_model_service import TfServingBaseService
 import pandas as pd
-from get_road_point import get_road_point, get_kv_point2prop, normalize
+from get_road_point import get_road_point, get_kv_point2prop
 
 class mnist_service(TfServingBaseService):
 
